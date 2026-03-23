@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Checkout - AgInventory</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+    <a class="brand" href="dashboard.html">🌾 AgInventory</a>
+    <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="parts.html">Parts</a>
+        <a href="checkout.html" class="active">Checkout</a>
+        <a href="purchaseorders.html">Purchase Orders</a>
+        <a href="auditlog.html">Audit Log</a>
+    </nav>
+</div>
+
+<div class="page-container">
+    <div class="page-title">Check Out Parts</div>
+    <div id="alertBox"></div>
+
+    <div class="card">
+        <div class="card-title">New Checkout</div>
+        <div class="form-group">
+            <label>Select Part</label>
+            <select id="partSelect">
+                <option value="">-- Select a part --</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Quantity</label>
+            <input type="number" id="qty" min="1" value="1">
+        </div>
+        <div class="form-group">
+            <label>Work Order Number</label>
+            <input type="text" id="workOrder" placeholder="e.g. WO-1001">
+        </div>
+        <div class="form-group">
+            <label>Reason</label>
+            <input type="text" id="reason" placeholder="e.g. Tractor repair">
+        </div>
+        <button class="btn btn-primary" onclick="doCheckout()">Check Out</button>
+    </div>
+
+    <!-- Current Stock Levels -->
+    <div class="card">
+        <div class="card-title">Current Stock Levels</div>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Part Name</th>
+                        <th>On Hand</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="stockTable">
+                    <tr><td colspan="5" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/api.js"></script>
+<script>
+$(document).ready(function() {
+    loadParts();
+    loadStock();
+});
+
+function loadParts() {
+    API.get('/parts').done(function(parts) {
+        parts.forEach(function(p) {
+            $('#partSelect').append(
+                `<option value="${p.partId}" data-location="1">
+                    ${p.sku} - ${p.name} (${p.qtyOnHand} in stock)
+                </option>`
+            );
+        });
+    });
+}
+
+function loadStock() {
+    API.get('/stock').done(function(stock) {
+        let rows = '';
+        stock.forEach(function(s) {
+            const status = s.qtyOnHand <= s.reorderPoint ? 'LOW STOCK' : 'OK';
+            rows += `<tr>
+                <td>${s.sku}</td>
+                <td>${s.partName}</td>
+                <td>${s.qtyOnHand}</td>
+                <td>${s.location}</td>
+                <td>${stockBadge(status)}</td>
+            </tr>`;
+        });
+        $('#stockTable').html(rows);
+    });
+}
+
+function doCheckout() {
+    const partId = parseInt($('#partSelect').val());
+    const qty = parseInt($('#qty').val());
+    const reason = $('#reason').val() || $('#workOrder').val() || 'Checkout';
+
+    if (!partId || !qty) {
+        showAlert('Please select a part and quantity', 'danger', 'alertBox');
+        return;
+    }
+
+    API.post('/stock/adjust', {
+        partId: partId,
+        locationId: 1,
+        qtyDelta: -qty,
+        userId: 1,
+        changeType: 'CHECKOUT',
+        reason: reason
+    }).done(function() {
+        showAlert('Part checked out successfully!', 'success', 'alertBox');
+        $('#partSelect').val('');
+        $('#qty').val(1);
+        $('#workOrder').val('');
+        $('#reason').val('');
+        loadStock();
+        loadParts();
+    }).fail(function() {
+        showAlert('Checkout failed. Please try again.', 'danger', 'alertBox');
+    });
+}
+</script>
+</body>
+</html>

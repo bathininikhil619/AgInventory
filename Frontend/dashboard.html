@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - AgInventory</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+    <a class="brand" href="dashboard.html">🌾 AgInventory</a>
+    <nav>
+        <a href="dashboard.html" class="active">Dashboard</a>
+        <a href="parts.html">Parts</a>
+        <a href="checkout.html">Checkout</a>
+        <a href="purchaseorders.html">Purchase Orders</a>
+        <a href="auditlog.html">Audit Log</a>
+    </nav>
+</div>
+
+<div class="page-container">
+    <div class="page-title">Dashboard</div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="label">Total Parts</div>
+            <div class="value" id="totalParts">-</div>
+        </div>
+        <div class="kpi-card danger">
+            <div class="label">Low Stock Items</div>
+            <div class="value" id="lowStockCount">-</div>
+        </div>
+        <div class="kpi-card">
+            <div class="label">Total Stock Value</div>
+            <div class="value" id="stockValue">-</div>
+        </div>
+        <div class="kpi-card warning">
+            <div class="label">Categories</div>
+            <div class="value" id="categoryCount">-</div>
+        </div>
+    </div>
+
+    <!-- Low Stock Alert -->
+    <div class="card">
+        <div class="card-title">⚠️ Low Stock Alerts</div>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Part Name</th>
+                        <th>Category</th>
+                        <th>On Hand</th>
+                        <th>Reorder Point</th>
+                        <th>Location</th>
+                    </tr>
+                </thead>
+                <tbody id="lowStockTable">
+                    <tr><td colspan="6" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recent Audit Log -->
+    <div class="card">
+        <div class="card-title">📋 Recent Activity</div>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Part</th>
+                        <th>SKU</th>
+                        <th>User</th>
+                        <th>Type</th>
+                        <th>Qty Change</th>
+                        <th>Reason</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="auditTable">
+                    <tr><td colspan="7" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/api.js"></script>
+<script>
+$(document).ready(function() {
+    // Load all parts for KPI cards
+    API.get('/parts').done(function(parts) {
+        $('#totalParts').text(parts.length);
+        const lowStock = parts.filter(p => p.stockStatus === 'LOW STOCK');
+        $('#lowStockCount').text(lowStock.length);
+        const value = parts.reduce((sum, p) => sum + (p.unitCost * p.qtyOnHand), 0);
+        $('#stockValue').text('$' + value.toFixed(0));
+    });
+
+    // Load categories count
+    API.get('/categories').done(function(cats) {
+        $('#categoryCount').text(cats.length);
+    });
+
+    // Load low stock table
+    API.get('/parts/lowstock').done(function(parts) {
+        if (parts.length === 0) {
+            $('#lowStockTable').html('<tr><td colspan="6" style="text-align:center;color:green">All stock levels are OK!</td></tr>');
+            return;
+        }
+        let rows = '';
+        parts.forEach(function(p) {
+            rows += `<tr>
+                <td>${p.sku}</td>
+                <td>${p.partName}</td>
+                <td>${p.category}</td>
+                <td><strong style="color:#dc3545">${p.qtyOnHand}</strong></td>
+                <td>${p.reorderPoint}</td>
+                <td>${p.location}</td>
+            </tr>`;
+        });
+        $('#lowStockTable').html(rows);
+    });
+
+    // Load audit log
+    API.get('/auditlog').done(function(logs) {
+        let rows = '';
+        logs.slice(0, 10).forEach(function(log) {
+            const delta = log.qtyDelta > 0
+                ? `<span style="color:green">+${log.qtyDelta}</span>`
+                : `<span style="color:red">${log.qtyDelta}</span>`;
+            rows += `<tr>
+                <td>${log.partName}</td>
+                <td>${log.sku}</td>
+                <td>${log.username}</td>
+                <td><span class="badge badge-info">${log.changeType}</span></td>
+                <td>${delta}</td>
+                <td>${log.reason || '-'}</td>
+                <td>${formatDate(log.createdAt)}</td>
+            </tr>`;
+        });
+        $('#auditTable').html(rows);
+    });
+});
+</script>
+</body>
+</html>

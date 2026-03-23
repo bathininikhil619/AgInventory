@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audit Log - AgInventory</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+    <a class="brand" href="dashboard.html">🌾 AgInventory</a>
+    <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="parts.html">Parts</a>
+        <a href="checkout.html">Checkout</a>
+        <a href="purchaseorders.html">Purchase Orders</a>
+        <a href="auditlog.html" class="active">Audit Log</a>
+    </nav>
+</div>
+
+<div class="page-container">
+    <div class="page-title">Audit Log</div>
+
+    <div class="card">
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Search by part name or SKU...">
+            <select id="typeFilter">
+                <option value="">All Types</option>
+                <option value="CHECKOUT">Checkout</option>
+                <option value="PO_RECEIVE">PO Receive</option>
+                <option value="ADJUSTMENT">Adjustment</option>
+            </select>
+        </div>
+
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Log #</th>
+                        <th>Part</th>
+                        <th>SKU</th>
+                        <th>User</th>
+                        <th>Type</th>
+                        <th>Qty Change</th>
+                        <th>Reason</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="logTable">
+                    <tr><td colspan="8" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/api.js"></script>
+<script>
+let allLogs = [];
+
+$(document).ready(function() {
+    API.get('/auditlog').done(function(logs) {
+        allLogs = logs;
+        renderTable(logs);
+    });
+
+    $('#searchInput, #typeFilter').on('input change', function() {
+        const search = $('#searchInput').val().toLowerCase();
+        const type = $('#typeFilter').val();
+
+        const filtered = allLogs.filter(function(l) {
+            const matchSearch = !search ||
+                l.partName.toLowerCase().includes(search) ||
+                l.sku.toLowerCase().includes(search);
+            const matchType = !type || l.changeType === type;
+            return matchSearch && matchType;
+        });
+        renderTable(filtered);
+    });
+});
+
+function renderTable(logs) {
+    if (logs.length === 0) {
+        $('#logTable').html('<tr><td colspan="8" style="text-align:center">No log entries found</td></tr>');
+        return;
+    }
+    let rows = '';
+    logs.forEach(function(log) {
+        const delta = log.qtyDelta > 0
+            ? `<span style="color:green;font-weight:600">+${log.qtyDelta}</span>`
+            : `<span style="color:red;font-weight:600">${log.qtyDelta}</span>`;
+
+        const typeBadge = log.changeType === 'CHECKOUT'
+            ? `<span class="badge badge-warning">${log.changeType}</span>`
+            : log.changeType === 'PO_RECEIVE'
+            ? `<span class="badge badge-success">${log.changeType}</span>`
+            : `<span class="badge badge-info">${log.changeType}</span>`;
+
+        rows += `<tr>
+            <td>#${log.logId}</td>
+            <td>${log.partName}</td>
+            <td>${log.sku}</td>
+            <td>${log.username}</td>
+            <td>${typeBadge}</td>
+            <td>${delta}</td>
+            <td>${log.reason || '-'}</td>
+            <td>${formatDate(log.createdAt)}</td>
+        </tr>`;
+    });
+    $('#logTable').html(rows);
+}
+</script>
+</body>
+</html>

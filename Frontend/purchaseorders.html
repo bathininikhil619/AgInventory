@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Purchase Orders - AgInventory</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+    <a class="brand" href="dashboard.html">🌾 AgInventory</a>
+    <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="parts.html">Parts</a>
+        <a href="checkout.html">Checkout</a>
+        <a href="purchaseorders.html" class="active">Purchase Orders</a>
+        <a href="auditlog.html">Audit Log</a>
+    </nav>
+</div>
+
+<div class="page-container">
+    <div class="page-title">Purchase Orders</div>
+    <div id="alertBox"></div>
+
+    <!-- Create PO -->
+    <div class="card">
+        <div class="card-title">Create New Purchase Order</div>
+        <div class="form-group">
+            <label>Supplier</label>
+            <select id="supplierSelect">
+                <option value="">-- Select supplier --</option>
+            </select>
+        </div>
+        <div class="card-title" style="margin-top:16px">Line Items</div>
+        <div id="lineItems">
+            <div class="line-item" style="display:flex;gap:10px;margin-bottom:10px">
+                <select class="part-select" style="flex:2;padding:8px;border:1px solid #ddd;border-radius:6px">
+                    <option value="">-- Select part --</option>
+                </select>
+                <input type="number" class="qty-input" placeholder="Qty" min="1"
+                    style="width:80px;padding:8px;border:1px solid #ddd;border-radius:6px">
+                <input type="number" class="cost-input" placeholder="Unit Cost" step="0.01"
+                    style="width:120px;padding:8px;border:1px solid #ddd;border-radius:6px">
+            </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="addLineItem()"
+            style="margin-bottom:16px">+ Add Item</button>
+        <br>
+        <button class="btn btn-primary" onclick="createPO()">Create Purchase Order</button>
+    </div>
+
+    <!-- Existing POs -->
+    <div class="card">
+        <div class="card-title">All Purchase Orders</div>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>PO #</th>
+                        <th>Supplier</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Received</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="poTable">
+                    <tr><td colspan="6" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/api.js"></script>
+<script>
+let allParts = [];
+
+$(document).ready(function() {
+    API.get('/suppliers').done(function(suppliers) {
+        suppliers.forEach(function(s) {
+            $('#supplierSelect').append(
+                `<option value="${s.supplierId}">${s.name}</option>`
+            );
+        });
+    });
+
+    API.get('/parts').done(function(parts) {
+        allParts = parts;
+        populatePartSelects();
+    });
+
+    loadPOs();
+});
+
+function populatePartSelects() {
+    $('.part-select').each(function() {
+        const current = $(this).val();
+        $(this).empty().append('<option value="">-- Select part --</option>');
+        allParts.forEach(function(p) {
+            $(this).append(
+                `<option value="${p.partId}" data-cost="${p.unitCost}">
+                    ${p.sku} - ${p.name}
+                </option>`
+            );
+        }.bind(this));
+        $(this).val(current);
+    });
+
+    $('.part-select').off('change').on('change', function() {
+        const cost = $(this).find(':selected').data('cost');
+        $(this).closest('.line-item').find('.cost-input').val(cost);
+    });
+}
+
+function addLineItem() {
+    const html = `<div class="line-item" style="display:flex;gap:10px;margin-bottom:10px">
+        <select class="part-select" style="flex:2;padding:8px;border:1px solid #ddd;border-radius:6px">
+            <option value="">-- Select part --</option>
+        </select>
+        <input type="number" class="qty-input" placeholder="Qty" min="1"
+            style="width:80px;padding:8px;border:1px solid #ddd;border-radius:6px">
+        <input type="number" class="cost-input" placeholder="Unit Cost" step="0.01"
+            style="width:120px;padding:8px;border:1px solid #ddd;border-radius:6px">
+        <button onclick="$(this).closest('.line-item').remove()"
+            style="background:#dc3545;color:white;border:none;border-radius:6px;padding:0 10px;cursor:pointer">×</button>
+    </div>`;
+    $('#lineItems').append(html);
+    populatePartSelects();
+}
+
+function createPO() {
+    const supplierId = parseInt($('#supplierSelect').val());
+    if (!supplierId) {
+        showAlert('Please select a supplier', 'danger', 'alertBox');
+        return;
+    }
+
+    const items = [];
+    $('.line-item').each(function() {
+        const partId = parseInt($(this).find('.part-select').val());
+        const qty = parseInt($(this).find('.qty-input').val());
+        const cost = parseFloat($(this).find('.cost-input').val());
+        if (partId && qty && cost) {
+            items.push({ partId, qtyOrdered: qty, unitCost: cost });
+        }
+    });
+
+    if (items.length === 0) {
+        showAlert('Please add at least one item', 'danger', 'alertBox');
+        return;
+    }
+
+    API.post('/purchaseorders', { supplierId, items }).done(function(result) {
+        showAlert(`PO #${result.poId} created successfully!`, 'success', 'alertBox');
+        loadPOs();
+    });
+}
+
+function loadPOs() {
+    API.get('/purchaseorders').done(function(orders) {
+        if (orders.length === 0) {
+            $('#poTable').html('<tr><td colspan="6" style="text-align:center">No purchase orders yet</td></tr>');
+            return;
+        }
+        let rows = '';
+        orders.forEach(function(po) {
+            const statusBadge = po.status === 'Received'
+                ? `<span class="badge badge-success">${po.status}</span>`
+                : po.status === 'Sent'
+                ? `<span class="badge badge-warning">${po.status}</span>`
+                : `<span class="badge badge-info">${po.status}</span>`;
+
+            const action = po.status !== 'Received'
+                ? `<button class="btn btn-primary btn-sm" onclick="receivePO(${po.poId})">Receive</button>`
+                : '-';
+
+            rows += `<tr>
+                <td>#${po.poId}</td>
+                <td>${po.supplierName}</td>
+                <td>${statusBadge}</td>
+                <td>${formatDate(po.createdAt)}</td>
+                <td>${po.receivedAt ? formatDate(po.receivedAt) : '-'}</td>
+                <td>${action}</td>
+            </tr>`;
+        });
+        $('#poTable').html(rows);
+    });
+}
+
+function receivePO(poId) {
+    if (!confirm(`Receive PO #${poId}? This will update stock levels.`)) return;
+    API.post('/purchaseorders/receive', { poId, userId: 1 }).done(function() {
+        showAlert(`PO #${poId} received! Stock updated.`, 'success', 'alertBox');
+        loadPOs();
+    });
+}
+</script>
+</body>
+</html>

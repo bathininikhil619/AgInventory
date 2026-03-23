@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Parts - AgInventory</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+    <a class="brand" href="dashboard.html">🌾 AgInventory</a>
+    <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="parts.html" class="active">Parts</a>
+        <a href="checkout.html">Checkout</a>
+        <a href="purchaseorders.html">Purchase Orders</a>
+        <a href="auditlog.html">Audit Log</a>
+    </nav>
+</div>
+
+<div class="page-container">
+    <div class="page-title">Parts Catalog</div>
+
+    <div class="card">
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Search by name or SKU...">
+            <select id="categoryFilter">
+                <option value="">All Categories</option>
+            </select>
+            <select id="statusFilter">
+                <option value="">All Status</option>
+                <option value="LOW STOCK">Low Stock</option>
+                <option value="OK">OK</option>
+            </select>
+        </div>
+
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Part Name</th>
+                        <th>Category</th>
+                        <th>Supplier</th>
+                        <th>Unit Cost</th>
+                        <th>On Hand</th>
+                        <th>Reorder</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="partsTable">
+                    <tr><td colspan="9" class="loading">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="js/api.js"></script>
+<script>
+let allParts = [];
+
+$(document).ready(function() {
+    // Load categories for filter
+    API.get('/categories').done(function(cats) {
+        cats.forEach(function(c) {
+            $('#categoryFilter').append(`<option value="${c.name}">${c.name}</option>`);
+        });
+    });
+
+    // Load all parts
+    API.get('/parts').done(function(parts) {
+        allParts = parts;
+        renderTable(parts);
+    });
+
+    // Search and filter
+    $('#searchInput, #categoryFilter, #statusFilter').on('input change', function() {
+        const search = $('#searchInput').val().toLowerCase();
+        const category = $('#categoryFilter').val();
+        const status = $('#statusFilter').val();
+
+        const filtered = allParts.filter(function(p) {
+            const matchSearch = !search ||
+                p.name.toLowerCase().includes(search) ||
+                p.sku.toLowerCase().includes(search);
+            const matchCategory = !category || p.category === category;
+            const matchStatus = !status || p.stockStatus === status;
+            return matchSearch && matchCategory && matchStatus;
+        });
+        renderTable(filtered);
+    });
+});
+
+function renderTable(parts) {
+    if (parts.length === 0) {
+        $('#partsTable').html('<tr><td colspan="9" style="text-align:center">No parts found</td></tr>');
+        return;
+    }
+    let rows = '';
+    parts.forEach(function(p) {
+        rows += `<tr>
+            <td><strong>${p.sku}</strong></td>
+            <td>${p.name}</td>
+            <td>${p.category}</td>
+            <td>${p.supplier}</td>
+            <td>$${p.unitCost.toFixed(2)}</td>
+            <td>${p.qtyOnHand}</td>
+            <td>${p.reorderPoint}</td>
+            <td>${p.location}</td>
+            <td>${stockBadge(p.stockStatus)}</td>
+        </tr>`;
+    });
+    $('#partsTable').html(rows);
+}
+</script>
+</body>
+</html>
