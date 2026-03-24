@@ -1,4 +1,7 @@
-const API_BASE = 'https://localhost:7015/api';
+
+
+// const API_BASE = 'https://localhost:7015/api';
+const API_BASE = 'https://aginventory-api-hggwgbgebcgfg8dj.westus3-01.azurewebsites.net/api';
 
 const API = {
     get: function(endpoint) {
